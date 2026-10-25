@@ -38,7 +38,7 @@ const Store = (() => {
       return true;
     } catch (err) {
       console.error("Could not save workouts", err);
-      alert("Couldn't save your workout on this device. Storage may be full or disabled.");
+      window.dispatchEvent(new Event("store-save-failed")); // app.js shows the message
       return false;
     }
   }

@@ -2,7 +2,7 @@
 // the network in the background, so updates show up on the next launch.
 // Bump CACHE when the list of files changes, or to force everyone onto a new version.
 
-const CACHE = "workout-app-v1";
+const CACHE = "workout-app-v2";
 const ASSETS = [
   "./",
   "index.html",

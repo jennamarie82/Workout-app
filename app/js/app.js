@@ -80,6 +80,33 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
 }
 
+// In-app replacement for confirm()/alert(). Browsers — including iPhone Home Screen
+// apps — can silently block native pop-ups, which makes buttons look broken.
+// Resolves true for the OK button, false for Cancel or a tap outside the box.
+function ask(message, { ok = "OK", cancel = "Cancel", danger = false } = {}) {
+  const dlg = document.getElementById("dialog");
+  const okBtn = dlg.querySelector('[data-dialog="ok"]');
+  const cancelBtn = dlg.querySelector('[data-dialog="cancel"]');
+  document.getElementById("dialog-msg").textContent = message;
+  okBtn.textContent = ok;
+  okBtn.classList.toggle("danger-fill", danger);
+  cancelBtn.hidden = cancel === null;
+  cancelBtn.textContent = cancel || "";
+  if (document.activeElement) document.activeElement.blur();
+  dlg.hidden = false;
+  return new Promise((resolve) => {
+    dlg.onclick = (e) => {
+      const choice = e.target.closest("[data-dialog]");
+      if (!choice && e.target !== dlg) return;
+      dlg.hidden = true;
+      dlg.onclick = null;
+      resolve(!!choice && choice.dataset.dialog === "ok");
+    };
+  });
+}
+
+const tell = (message) => ask(message, { cancel: null });
+
 function go(hash, replace = false) {
   if (replace) location.replace(hash);
   else location.hash = hash;
@@ -292,14 +319,14 @@ function flagInput(input) {
   input.focus();
 }
 
-function finishWorkout() {
+async function finishWorkout() {
   const d = Store.state.draft;
   const { done, total } = progress(d);
   if (!done) {
-    alert("Tap ✓ on each set you completed, then finish.");
+    await tell("Tap ✓ on each set you completed, then finish.");
     return;
   }
-  if (done < total && !confirm(`${plural(total - done, "set")} not ticked will be left out. Finish anyway?`)) return;
+  if (done < total && !(await ask(`${plural(total - done, "set")} not ticked will be left out. Finish anyway?`, { ok: "Finish" }))) return;
 
   const workout = {
     id: d.id,
@@ -384,12 +411,12 @@ function renderWorkout(id) {
 // ---------- Actions ----------
 
 const actions = {
-  start(btn) {
+  async start(btn) {
     const day = btn.dataset.day;
     const draft = Store.state.draft;
     if (draft && !(draft.day === day && !draft.editing)) {
       const what = draft.editing ? "unsaved changes to a past workout" : `a ${PROGRAM[draft.day].name} workout in progress`;
-      if (!confirm(`You have ${what}. Discard it and start ${PROGRAM[day].name}?`)) return;
+      if (!(await ask(`You have ${what}. Discard it and start ${PROGRAM[day].name}?`, { ok: "Discard", danger: true }))) return;
       Store.state.draft = null;
     }
     if (!Store.state.draft) {
@@ -401,9 +428,9 @@ const actions = {
 
   resume() { go("#/log"); },
 
-  discard() {
+  async discard() {
     const d = Store.state.draft;
-    if (!confirm(d.editing ? "Discard your unsaved changes?" : `Discard this ${PROGRAM[d.day].name} workout?`)) return;
+    if (!(await ask(d.editing ? "Discard your unsaved changes?" : `Discard this ${PROGRAM[d.day].name} workout?`, { ok: "Discard", danger: true }))) return;
     Store.state.draft = null;
     Store.save();
     renderHome();
@@ -453,18 +480,18 @@ const actions = {
 
   finish: finishWorkout,
 
-  "edit-workout"(btn) {
+  async "edit-workout"(btn) {
     const w = Store.state.workouts.find((x) => x.id === btn.dataset.id);
     const draft = Store.state.draft;
-    if (draft && !confirm(`You have ${draft.editing ? "unsaved edits" : "a workout in progress"}. Discard it and edit this one?`)) return;
+    if (draft && !(await ask(`You have ${draft.editing ? "unsaved edits" : "a workout in progress"}. Discard it and edit this one?`, { ok: "Discard", danger: true }))) return;
     Store.state.draft = editDraft(w);
     Store.save();
     go("#/log");
   },
 
-  "delete-workout"(btn) {
+  async "delete-workout"(btn) {
     const w = Store.state.workouts.find((x) => x.id === btn.dataset.id);
-    if (!confirm(`Delete ${PROGRAM[w.day].name} from ${formatDate(w.date)}? This can't be undone.`)) return;
+    if (!(await ask(`Delete ${PROGRAM[w.day].name} from ${formatDate(w.date)}? This can't be undone.`, { ok: "Delete", danger: true }))) return;
     Store.state.workouts = Store.state.workouts.filter((x) => x.id !== w.id);
     Store.save();
     toast("Workout deleted");
@@ -514,6 +541,7 @@ function route() {
 }
 
 Store.load();
+window.addEventListener("store-save-failed", () => tell("Couldn't save your workout on this device. Storage may be full or disabled."));
 window.addEventListener("hashchange", route);
 route();
 
