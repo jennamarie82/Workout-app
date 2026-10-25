@@ -123,4 +123,4 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
 - [ ] Settings: lb/kg, export/import backup
 - [x] Home lets you pick any day (rotation's next day is only highlighted)
 - [x] Git + GitHub Pages workflow
-- [ ] First push to GitHub / confirm the Pages site is live
+- [x] Live on GitHub Pages (push from GitHub Desktop; deploy runs automatically)
