@@ -39,6 +39,7 @@ app/
   data/program.js    – PROGRAM constant: days, exercises, sets, rep ranges
   icons/             – app icons (180×180 apple-touch-icon, 192, 512)
 tools/make_icons.py  – regenerates the icons (no dependencies): python3 tools/make_icons.py
+tools/bump_version.py – bumps the app version after any app/ change
 .github/workflows/pages.yml – deploys app/ to GitHub Pages
 ```
 
@@ -108,9 +109,12 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
 ## Conventions
 - Keep it dependency-free; if a library is ever needed, vendor it locally (must work offline).
 - `storage.js` is the only module that reads/writes `localStorage`.
+- **After changing any file in `app/`, run `python3 tools/bump_version.py`.** It bumps `VERSION`
+  in `sw.js` and every `?v=` in `index.html` together. GitHub Pages' CDN caches each URL for
+  10 minutes, so without new versioned URLs phones can load a mix of old and new files.
 - `sw.js` is stale-while-revalidate: phones get updates on the *next* launch after a change.
-  Its fetches use `cache: "no-cache"` so GitHub Pages' 10-minute HTTP cache can't feed it stale files.
-  Add any new app file to its `ASSETS` list and bump `CACHE`.
+  Its fetches use `cache: "no-cache"`. A new app file must be added to `ASSETS` (with `?v=` if
+  it's a script or stylesheet referenced from index.html).
 - The service worker only registers on HTTPS, so local `http://` testing is never cached.
 
 ## Testing
