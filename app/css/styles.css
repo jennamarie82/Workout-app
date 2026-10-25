@@ -238,6 +238,45 @@ textarea { width: 100%; min-height: 80px; padding: 10px 12px; resize: vertical; 
 .detail-sets li span:first-child { width: 48px; color: var(--muted); }
 .notes { white-space: pre-wrap; }
 
+/* ---------- Progress ---------- */
+
+.list-card { padding: 0 14px; }
+.ex-row {
+  display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 0;
+  border-top: 0.5px solid var(--line);
+}
+.ex-row:first-child { border-top: 0; }
+.ex-row:active { opacity: 0.6; }
+.ex-row .grow { flex: 1; min-width: 0; }
+.ex-row .muted { display: block; font-size: 14px; }
+.pr { flex: none; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pr small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+
+.ex-link { color: inherit; }
+.ex-link span { color: var(--muted); font-weight: 500; }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--card); border-radius: var(--radius); padding: 12px 10px; min-width: 0; }
+.stat-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.stat strong {
+  display: block; margin: 2px 0; font-size: 22px; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stat-sub { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.chart-title { font-size: 17px; font-weight: 700; }
+.chart-title .muted { font-weight: 400; }
+.readout { min-height: 22px; margin: 4px 0 6px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.chart-note { font-size: 13px; margin-top: 4px; }
+
+.chart { display: block; width: 100%; height: auto; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+.chart .sel { stroke-width: 2.5; }
+.chart .xhair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+
 /* ---------- Tab bar & toast ---------- */
 
 .tabbar {

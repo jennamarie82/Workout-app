@@ -3,13 +3,19 @@
 //   #/log          Workout logger – edits Store.state.draft (autosaved on every change)
 //   #/history      History – list of finished workouts
 //   #/workout/ID   One finished workout – view, edit, delete
+//   #/progress     Progress – every exercise with its best so far
+//   #/exercise/ID  One exercise – stats, chart and every session
 
 const DAYS = ["A", "B", "C"];
 const view = document.getElementById("view");
 
 const exerciseById = {};
+const dayOfExercise = {};
 for (const day of DAYS) {
-  for (const ex of PROGRAM[day].exercises) exerciseById[ex.id] = ex;
+  for (const ex of PROGRAM[day].exercises) {
+    exerciseById[ex.id] = ex;
+    dayOfExercise[ex.id] = day;
+  }
 }
 
 // ---------- Helpers ----------
@@ -393,7 +399,10 @@ function renderWorkout(id) {
     const ex = exerciseById[e.exerciseId];
     html += `
       <section class="card">
-        <div class="ex-head"><h2>${esc(ex ? ex.name : e.exerciseId)}</h2>${ex ? `<span class="target">${esc(targetText(ex))}</span>` : ""}</div>
+        <div class="ex-head">
+          <h2>${ex ? `<a class="ex-link" href="#/exercise/${esc(ex.id)}">${esc(ex.name)} <span aria-hidden="true">›</span></a>` : esc(e.exerciseId)}</h2>
+          ${ex ? `<span class="target">${esc(targetText(ex))}</span>` : ""}
+        </div>
         <ul class="detail-sets">
           ${e.sets.map((s, i) => `<li><span>Set ${i + 1}</span><span>${esc(ex ? setText(ex, s) : "")}</span></li>`).join("")}
         </ul>
@@ -406,6 +415,209 @@ function renderWorkout(id) {
       <button class="btn danger" data-action="delete-workout" data-id="${esc(w.id)}">Delete</button>
     </div>`;
   view.innerHTML = html;
+}
+
+// ---------- Progress ----------
+
+// Every finished session of one exercise, oldest first.
+function exerciseHistory(exerciseId) {
+  return finishedWorkouts().reverse().flatMap((w) => {
+    const e = w.exercises.find((x) => x.exerciseId === exerciseId);
+    return e && e.sets.length ? [{ date: w.date, workoutId: w.id, sets: e.sets }] : [];
+  });
+}
+
+// What "better" means for an exercise: more weight, or — when it's done without
+// weight — more reps / a longer hold. Each session is scored by its best set.
+function progressMetric(ex, history) {
+  if (ex.type === "time") return { label: "Longest hold", unit: "s", value: (s) => s.seconds ?? 0 };
+  if (history.some((h) => h.sets.some((s) => s.weight != null))) {
+    return { label: "Heaviest set", unit: ` ${units()}`, value: (s) => s.weight ?? 0 };
+  }
+  return { label: "Most reps", unit: " reps", value: (s) => s.reps ?? 0 };
+}
+
+// Highest-scoring set; ties go to the one with more reps.
+function bestSet(sets, metric) {
+  return sets.reduce((best, s) => {
+    const v = metric.value(s), b = metric.value(best);
+    return v > b || (v === b && (s.reps ?? 0) > (best.reps ?? 0)) ? s : best;
+  });
+}
+
+const fmtNum = (n) => (Math.round(n * 10) / 10).toLocaleString();
+
+// "× 12" for weighted sets, so tiles can show the weight big and the reps small.
+function repsSuffix(ex, s, metric) {
+  if (ex.type === "time" || metric.label === "Most reps" || s.reps == null) return "";
+  return `× ${s.reps}${ex.perSide ? "/leg" : ""}`;
+}
+
+function renderProgress() {
+  let html = `<header class="page-head"><p class="eyebrow">By exercise</p><h1>Progress</h1></header>`;
+  for (const day of DAYS) {
+    html += `<h2 class="section-title">${esc(PROGRAM[day].name)}</h2><div class="card list-card">`;
+    for (const ex of PROGRAM[day].exercises) {
+      const history = exerciseHistory(ex.id);
+      let sub = "Not logged yet";
+      let best = "";
+      if (history.length) {
+        const metric = progressMetric(ex, history);
+        const top = Math.max(...history.map((h) => metric.value(bestSet(h.sets, metric))));
+        sub = `Last done ${daysAgo(history[history.length - 1].date)} · ${plural(history.length, "session")}`;
+        best = `<span class="pr"><small>Best</small>${fmtNum(top)}${esc(metric.unit)}</span>`;
+      }
+      html += `
+        <a class="ex-row" href="#/exercise/${esc(ex.id)}">
+          <span class="grow"><strong>${esc(ex.name)}</strong><span class="muted">${sub}</span></span>
+          ${best}
+          <span class="chev" aria-hidden="true">›</span>
+        </a>`;
+    }
+    html += `</div>`;
+  }
+  view.innerHTML = html;
+}
+
+function renderExercise(id) {
+  const ex = exerciseById[id];
+  if (!ex) return go("#/progress", true);
+  const history = exerciseHistory(id);
+  let html = `
+    <header class="bar">
+      <a class="bar-btn" href="#/progress">‹ Progress</a>
+      <span></span><span></span>
+    </header>
+    <header class="page-head">
+      <p class="eyebrow">${esc(PROGRAM[dayOfExercise[id]].name)}</p>
+      <h1>${esc(ex.name)}</h1>
+      <p class="muted">Target ${esc(targetText(ex))}</p>
+    </header>`;
+
+  if (!history.length) {
+    view.innerHTML = html + `<div class="empty"><p>📈</p><p>No sets logged yet.<br>Finish a workout with ${esc(ex.name)} and your progress will show here.</p></div>`;
+    return;
+  }
+
+  const metric = progressMetric(ex, history);
+  const points = history.map((h) => ({ ...h, best: bestSet(h.sets, metric) }));
+  const last = points[points.length - 1];
+  const pr = points.reduce((a, b) => (metric.value(b.best) > metric.value(a.best) ? b : a));
+  const change = metric.value(last.best) - metric.value(points[0].best);
+  const tile = (label, value, sub) => `
+    <div class="stat"><span class="stat-label">${label}</span><strong>${value}</strong><span class="stat-sub">${sub}</span></div>`;
+
+  html += `<section class="stats">
+    ${tile("Best", `${fmtNum(metric.value(pr.best))}${esc(metric.unit)}`, `${repsSuffix(ex, pr.best, metric)} ${esc(formatDate(pr.date, { month: "short", day: "numeric" }))}`)}
+    ${tile("Last time", `${fmtNum(metric.value(last.best))}${esc(metric.unit)}`, `${repsSuffix(ex, last.best, metric)} ${daysAgo(last.date)}`)}
+    ${points.length > 1
+      ? tile("Change", `${change > 0 ? "+" : change < 0 ? "−" : ""}${fmtNum(Math.abs(change))}${esc(metric.unit)}`, `since ${esc(formatDate(points[0].date, { month: "short", day: "numeric" }))}`)
+      : tile("Sessions", "1", "so far")}
+  </section>`;
+
+  const unitName = ex.type === "time" ? "seconds" : metric.label === "Most reps" ? "reps" : units();
+  html += `
+    <section class="card">
+      <h2 class="chart-title">${metric.label} each workout <span class="muted">(${unitName})</span></h2>
+      <p class="readout" id="readout"></p>
+      ${chartSVG(points, metric, ex)}
+      ${points.length === 1 ? `<p class="muted chart-note">Log ${esc(ex.name)} again to see your trend.</p>` : ""}
+    </section>
+    <h2 class="section-title">All sessions</h2>
+    <div class="card list-card">
+      ${points.slice().reverse().map((p) => `
+        <a class="ex-row" href="#/workout/${encodeURIComponent(p.workoutId)}">
+          <span class="grow">
+            <strong>${esc(formatDate(p.date, { weekday: "short", month: "short", day: "numeric" }))}</strong>
+            <span class="muted">${p.sets.map((s) => esc(setText(ex, s, true))).join(" · ")}${ex.type === "time" || metric.label === "Most reps" ? "" : ` ${units()}`}</span>
+          </span>
+          <span class="chev" aria-hidden="true">›</span>
+        </a>`).join("")}
+    </div>`;
+  view.innerHTML = html;
+  wireChart(points, metric, ex);
+}
+
+// ---------- Chart ----------
+// A single-series line chart in plain SVG. One line, so no legend: the card title
+// names it. Tap or drag anywhere on it to read a session's best set.
+
+const CHART = { w: 320, h: 170, left: 36, right: 12, top: 12, bottom: 24 };
+
+function niceStep(raw) {
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => s >= raw);
+}
+
+function chartScales(points, metric) {
+  const { w, h, left, right, top, bottom } = CHART;
+  const vals = points.map((p) => metric.value(p.best));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo === hi) { lo -= 5; hi += 5; } // a flat run sits mid-chart
+  const pad = (hi - lo) * 0.15;
+  lo = Math.max(0, lo - pad);
+  hi += pad;
+  const step = niceStep((hi - lo) / 3);
+  const ticks = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(Math.round(t * 100) / 100);
+
+  const times = points.map((p) => parseISO(p.date).getTime());
+  const t0 = Math.min(...times), t1 = Math.max(...times);
+  const x = (t) => (t1 === t0 ? (left + w - right) / 2 : left + ((t - t0) / (t1 - t0)) * (w - left - right));
+  const y = (v) => top + (1 - (v - lo) / (hi - lo)) * (h - top - bottom);
+  return { ticks, x, y, coords: points.map((p, i) => ({ x: x(times[i]), y: y(vals[i]) })) };
+}
+
+function chartSVG(points, metric, ex) {
+  const { w, h, left, right, bottom } = CHART;
+  const { ticks, y, coords } = chartScales(points, metric);
+  const short = (iso) => esc(formatDate(iso, { month: "short", day: "numeric" }));
+  const grid = ticks.map((t) => `
+    <line class="grid" x1="${left}" x2="${w - right}" y1="${y(t)}" y2="${y(t)}"/>
+    <text class="axis" x="${left - 6}" y="${y(t) + 3.5}" text-anchor="end">${fmtNum(t)}</text>`).join("");
+  const xLabels = points.length > 1
+    ? `<text class="axis" x="${left}" y="${h - 6}">${short(points[0].date)}</text>
+       <text class="axis" x="${w - right}" y="${h - 6}" text-anchor="end">${short(points[points.length - 1].date)}</text>`
+    : `<text class="axis" x="${coords[0].x}" y="${h - 6}" text-anchor="middle">${short(points[0].date)}</text>`;
+  const path = coords.map((c, i) => `${i ? "L" : "M"}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join("");
+  // Markers stay readable up to ~24 sessions; beyond that only the selected one shows.
+  const dots = points.length <= 24 ? coords.map((c) => `<circle class="dot" cx="${c.x}" cy="${c.y}" r="4"/>`).join("") : "";
+  return `
+    <svg class="chart" id="chart" viewBox="0 0 ${w} ${h}" role="img"
+         aria-label="${esc(`${metric.label} for ${ex.name} across ${plural(points.length, "workout")}`)}">
+      ${grid}
+      <line class="xhair" id="xhair" y1="${CHART.top}" y2="${h - bottom}"/>
+      ${points.length > 1 ? `<path class="line" d="${path}"/>` : ""}
+      ${dots}
+      <circle class="dot sel" id="sel" r="6"/>
+      ${xLabels}
+    </svg>`;
+}
+
+function wireChart(points, metric, ex) {
+  const svg = document.getElementById("chart");
+  const { coords } = chartScales(points, metric);
+  const select = (i) => {
+    const c = coords[i], p = points[i];
+    const xhair = svg.querySelector("#xhair");
+    xhair.setAttribute("x1", c.x);
+    xhair.setAttribute("x2", c.x);
+    const sel = svg.querySelector("#sel");
+    sel.setAttribute("cx", c.x);
+    sel.setAttribute("cy", c.y);
+    document.getElementById("readout").innerHTML =
+      `<strong>${esc(setText(ex, p.best))}</strong> <span class="muted">· ${esc(formatDate(p.date, { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}</span>`;
+  };
+  const nearest = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const vx = ((e.clientX - rect.left) / rect.width) * CHART.w;
+    let best = 0;
+    coords.forEach((c, i) => { if (Math.abs(c.x - vx) < Math.abs(coords[best].x - vx)) best = i; });
+    select(best);
+  };
+  svg.addEventListener("pointerdown", nearest);
+  svg.addEventListener("pointermove", nearest);
+  select(points.length - 1);
 }
 
 // ---------- Actions ----------
@@ -529,13 +741,16 @@ function route() {
   if (screen === "log" && !Store.state.draft) return go("#/", true);
 
   document.body.dataset.route = screen;
+  const tab = { workout: "history", exercise: "progress" }[screen] || screen;
   document.querySelectorAll(".tabbar a").forEach((a) => {
-    a.classList.toggle("active", a.dataset.tab === (screen === "workout" ? "history" : screen));
+    a.classList.toggle("active", a.dataset.tab === tab);
   });
 
   if (screen === "log") renderLog();
   else if (screen === "history") renderHistory();
   else if (screen === "workout") renderWorkout(decodeURIComponent(param || ""));
+  else if (screen === "progress") renderProgress();
+  else if (screen === "exercise") renderExercise(decodeURIComponent(param || ""));
   else renderHome();
   window.scrollTo(0, 0);
 }

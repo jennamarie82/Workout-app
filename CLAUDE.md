@@ -42,7 +42,8 @@ tools/make_icons.py  – regenerates the icons (no dependencies): python3 tools/
 .github/workflows/pages.yml – deploys app/ to GitHub Pages
 ```
 
-Routing is hash-based in `app.js`: `#/` Home, `#/log` logger, `#/history`, `#/workout/<id>`.
+Routing is hash-based in `app.js`: `#/` Home, `#/log` logger, `#/history`, `#/workout/<id>`,
+`#/progress`, `#/exercise/<id>`. Tab bar: Workout · History · Progress.
 Scripts are plain `<script>` tags (no modules), loaded in order: program.js → storage.js → app.js.
 
 ## The program
@@ -88,7 +89,10 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
    shows target reps, weight & reps inputs pre-filled from last time, and a ✓ button.
    "Finish workout" saves it. In-progress workouts autosave so nothing is lost.
 3. **History** – list of past workouts by date; tap to view/edit/delete.
-4. **Exercise progress** – per-exercise log of past sets and best weight.
+4. **Progress** – every exercise grouped by day with its best so far; tap one for stat tiles
+   (Best / Last time / Change), a line chart of each session's best set (tap or drag to read a
+   point), and every session listed. "Best" = heaviest weight; Plank = longest hold; an exercise
+   never logged with weight = most reps. The chart is hand-built SVG in `app.js` (no library).
 5. **Settings** – lb/kg, export/import backup.
 
 ## iPhone / UX conventions
@@ -120,7 +124,7 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
 - [x] Folder structure, program data, CLAUDE.md
 - [x] Home, Workout logger, History + workout detail (view / edit / delete)
 - [x] PWA manifest, service worker, icons
-- [ ] Exercise progress screen
+- [x] Progress screen (per-exercise stats, chart, session list)
 - [ ] Settings: lb/kg, export/import backup
 - [x] Home lets you pick any day (rotation's next day is only highlighted)
 - [x] Git + GitHub Pages workflow
