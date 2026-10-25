@@ -105,6 +105,7 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
 - Keep it dependency-free; if a library is ever needed, vendor it locally (must work offline).
 - `storage.js` is the only module that reads/writes `localStorage`.
 - `sw.js` is stale-while-revalidate: phones get updates on the *next* launch after a change.
+  Its fetches use `cache: "no-cache"` so GitHub Pages' 10-minute HTTP cache can't feed it stale files.
   Add any new app file to its `ASSETS` list and bump `CACHE`.
 - The service worker only registers on HTTPS, so local `http://` testing is never cached.
 

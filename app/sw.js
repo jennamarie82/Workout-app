@@ -1,8 +1,12 @@
 // Offline support. Serves the cached app instantly, then refreshes the cache from
 // the network in the background, so updates show up on the next launch.
 // Bump CACHE when the list of files changes, or to force everyone onto a new version.
+//
+// Network fetches use cache: "no-cache" so they revalidate with the server instead of
+// reusing the browser's HTTP cache (GitHub Pages allows 10 minutes), which would
+// otherwise store stale files under a new CACHE name.
 
-const CACHE = "workout-app-v2";
+const CACHE = "workout-app-v3";
 const ASSETS = [
   "./",
   "index.html",
@@ -17,7 +21,9 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS.map((url) => new Request(url, { cache: "no-cache" }))))
+  );
   self.skipWaiting();
 });
 
@@ -35,7 +41,8 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     caches.match(req, { ignoreSearch: true }).then((cached) => {
-      const network = fetch(req)
+      // Fetch by URL: a navigation Request can't be re-issued with different options.
+      const network = fetch(req.url, { cache: "no-cache" })
         .then((res) => {
           if (res.ok) {
             const copy = res.clone();
@@ -44,6 +51,7 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() => cached);
+      if (cached) event.waitUntil(network);
       return cached || network;
     })
   );
