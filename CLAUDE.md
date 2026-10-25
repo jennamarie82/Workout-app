@@ -19,10 +19,10 @@ for every set the **weight** and **reps** done, so progress can be tracked over 
   and offline.
 - **Storage: `localStorage`** (JSON) on the device. Single user, no accounts, no backend.
   Because Safari can clear site data, provide **Export / Import (JSON)** for backups.
-- **Hosting: GitHub Pages** — repo `jennamarie82/workout-app` (public), live at
-  https://jennamarie82.github.io/workout-app/. `.github/workflows/pages.yml` publishes the
+- **Hosting: GitHub Pages** — repo `jennamarie82/Workout-app` (must be public), live at
+  https://jennamarie82.github.io/Workout-app/. `.github/workflows/pages.yml` publishes the
   `app/` folder on every push to `main` (Pages source must be set to "GitHub Actions").
-  All paths in the app must stay relative (it's served from `/workout-app/`, not `/`).
+  All paths in the app must stay relative (it's served from `/Workout-app/`, not `/`).
   Workout data never goes to GitHub — it lives only in the phone's localStorage.
 
 ## Folder structure
