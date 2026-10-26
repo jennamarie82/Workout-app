@@ -11,6 +11,7 @@ const Store = (() => {
     return {
       version: VERSION,
       units: "lb",
+      name: null, // the person using this phone; null = not asked yet, "" = skipped
       workouts: [],
       draft: null, // the workout currently being logged or edited (autosaved)
     };

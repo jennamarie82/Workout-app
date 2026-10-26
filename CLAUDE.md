@@ -44,7 +44,8 @@ tools/bump_version.py – bumps the app version after any app/ change
 ```
 
 Routing is hash-based in `app.js`: `#/` Home, `#/log` logger, `#/history`, `#/workout/<id>`,
-`#/progress`, `#/exercise/<id>`. Tab bar: Workout · History · Progress.
+`#/progress`, `#/exercise/<id>`, `#/settings`. Tab bar: Workout · History · Progress.
+While `name` is null every route shows the Welcome screen (asks for a name, can be skipped).
 Scripts are plain `<script>` tags (no modules), loaded in order: program.js → storage.js → app.js.
 
 ## The program
@@ -61,6 +62,7 @@ Plank is a **timed** exercise (log seconds, no weight). Step Ups are **per leg**
 {
   version: 1,
   units: "lb",                       // "lb" | "kg"
+  name: "Jenna",                     // person using this phone; null = never asked (shows Welcome), "" = skipped
   workouts: [
     {
       id: "2026-10-25T17:30:00.000Z",  // unique id (creation timestamp)
@@ -94,7 +96,10 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
    (Best / Last time / Change), a line chart of each session's best set (tap or drag to read a
    point), and every session listed. "Best" = heaviest weight; Plank = longest hold; an exercise
    never logged with weight = most reps. The chart is hand-built SVG in `app.js` (no library).
-5. **Settings** – lb/kg, export/import backup.
+5. **Settings** (person icon on Home) – name (built); lb/kg and export/import backup still to do.
+
+**Sharing:** anyone can open the same link. Each phone keeps its own name and workouts in its
+own localStorage — nothing is shared between people and nothing goes to a server.
 
 ## iPhone / UX conventions
 - Mobile-first, design for ~375–430px wide; respect safe areas
@@ -129,6 +134,7 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
 - [x] Home, Workout logger, History + workout detail (view / edit / delete)
 - [x] PWA manifest, service worker, icons
 - [x] Progress screen (per-exercise stats, chart, session list)
+- [x] Welcome screen asks for a name; Home says "Hi, <name>"; Settings to change it
 - [ ] Settings: lb/kg, export/import backup
 - [x] Home lets you pick any day (rotation's next day is only highlighted)
 - [x] Git + GitHub Pages workflow

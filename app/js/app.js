@@ -193,9 +193,14 @@ function renderHome() {
   const draft = Store.state.draft;
   const next = nextDay();
   let html = `
-    <header class="page-head">
-      <p class="eyebrow">${esc(formatDate(todayISO(), { weekday: "long", month: "long", day: "numeric" }))}</p>
-      <h1>Workouts</h1>
+    <header class="page-head home-head">
+      <div>
+        <p class="eyebrow">${esc(formatDate(todayISO(), { weekday: "long", month: "long", day: "numeric" }))}</p>
+        <h1>${Store.state.name ? `Hi, ${esc(Store.state.name)}` : "Workouts"}</h1>
+      </div>
+      <a class="icon-btn" href="#/settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+      </a>
     </header>`;
 
   if (draft) {
@@ -416,6 +421,51 @@ function renderWorkout(id) {
     </div>`;
   view.innerHTML = html;
 }
+
+// ---------- Welcome & Settings ----------
+// Everyone who opens the shared link gets their own copy on their own phone,
+// so the name (like the workouts) only ever lives on that device.
+
+function renderWelcome() {
+  view.innerHTML = `
+    <form class="welcome" id="name-form">
+      <p class="welcome-icon" aria-hidden="true">🏋️</p>
+      <h1>Welcome!</h1>
+      <p class="muted">Log your Day A, B and C workouts and watch your progress.</p>
+      <label class="field-label" for="name-input">What's your name?</label>
+      <input id="name-input" class="text-input" type="text" autocomplete="given-name" autocapitalize="words"
+             enterkeyhint="done" maxlength="40" placeholder="Your name">
+      <button class="btn primary block" type="submit">Continue</button>
+      <button class="btn ghost block" type="button" data-action="skip-name">Skip</button>
+    </form>`;
+}
+
+function renderSettings() {
+  view.innerHTML = `
+    <header class="bar">
+      <a class="bar-btn" href="#/">‹ Home</a>
+      <h1>Settings</h1>
+      <span></span>
+    </header>
+    <section class="card">
+      <label class="field-label" for="name-input">Your name</label>
+      <input id="name-input" class="text-input" type="text" autocomplete="given-name" autocapitalize="words"
+             enterkeyhint="done" maxlength="40" placeholder="Your name" value="${esc(Store.state.name || "")}">
+      <p class="muted hint">Shown on the Home screen. It stays on this phone — nothing is shared.</p>
+    </section>`;
+}
+
+function saveName(value) {
+  Store.state.name = value.trim();
+  Store.save();
+}
+
+view.addEventListener("submit", (e) => {
+  if (e.target.id !== "name-form") return;
+  e.preventDefault();
+  saveName(document.getElementById("name-input").value);
+  route();
+});
 
 // ---------- Progress ----------
 
@@ -640,6 +690,11 @@ const actions = {
 
   resume() { go("#/log"); },
 
+  "skip-name"() {
+    saveName("");
+    route();
+  },
+
   async discard() {
     const d = Store.state.draft;
     if (!(await ask(d.editing ? "Discard your unsaved changes?" : `Discard this ${PROGRAM[d.day].name} workout?`, { ok: "Discard", danger: true }))) return;
@@ -720,6 +775,7 @@ view.addEventListener("input", (e) => {
   const el = e.target;
   const field = el.dataset.field;
   const d = Store.state.draft;
+  if (el.id === "name-input" && document.body.dataset.route === "settings") return saveName(el.value);
   if (!field || !d) return;
   if (field === "date") d.date = el.value || todayISO();
   else if (field === "notes") d.notes = el.value;
@@ -737,11 +793,12 @@ view.addEventListener("focusin", (e) => {
 
 function route() {
   const [name, param] = location.hash.replace(/^#\/?/, "").split("/");
-  const screen = name || "home";
+  let screen = name || "home";
   if (screen === "log" && !Store.state.draft) return go("#/", true);
+  if (Store.state.name == null) screen = "welcome"; // first launch on this phone
 
   document.body.dataset.route = screen;
-  const tab = { workout: "history", exercise: "progress" }[screen] || screen;
+  const tab = { workout: "history", exercise: "progress", settings: "home" }[screen] || screen;
   document.querySelectorAll(".tabbar a").forEach((a) => {
     a.classList.toggle("active", a.dataset.tab === tab);
   });
@@ -751,6 +808,8 @@ function route() {
   else if (screen === "workout") renderWorkout(decodeURIComponent(param || ""));
   else if (screen === "progress") renderProgress();
   else if (screen === "exercise") renderExercise(decodeURIComponent(param || ""));
+  else if (screen === "welcome") renderWelcome();
+  else if (screen === "settings") renderSettings();
   else renderHome();
   window.scrollTo(0, 0);
 }

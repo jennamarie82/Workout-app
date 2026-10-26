@@ -238,6 +238,27 @@ textarea { width: 100%; min-height: 80px; padding: 10px 12px; resize: vertical; 
 .detail-sets li span:first-child { width: 48px; color: var(--muted); }
 .notes { white-space: pre-wrap; }
 
+/* ---------- Welcome & Settings ---------- */
+
+.home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.home-head h1 { overflow-wrap: anywhere; }
+.icon-btn {
+  flex: none; width: 44px; height: 44px; margin-top: 4px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--card); color: var(--accent);
+}
+.icon-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+.text-input { width: 100%; min-height: 50px; padding: 0 14px; display: block; }
+.hint { font-size: 14px; margin-top: 8px; }
+
+.welcome { display: flex; flex-direction: column; gap: 12px; padding-top: 12vh; text-align: center; }
+.welcome-icon { font-size: 56px; }
+.welcome h1 { font-size: 34px; font-weight: 700; }
+.welcome > .muted { margin-bottom: 20px; }
+.welcome .field-label { text-align: left; margin: 0 0 -6px; }
+.welcome .btn.ghost { color: var(--muted); font-weight: 500; }
+body[data-route="welcome"] .tabbar { display: none; }
+
 /* ---------- Progress ---------- */
 
 .list-card { padding: 0 14px; }

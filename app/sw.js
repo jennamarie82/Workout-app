@@ -6,7 +6,7 @@
 // The versioned URLs stop GitHub Pages' CDN (10-minute cache per URL) from handing
 // out a mix of old and new files, and each version gets its own cache.
 
-const VERSION = 4;
+const VERSION = 5;
 const CACHE = `workout-app-v${VERSION}`;
 const ASSETS = [
   "./",
