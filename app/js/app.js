@@ -25,8 +25,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
 ));
 
 // Local date as YYYY-MM-DD (toISOString would use UTC and can be off by a day).
-function todayISO() {
-  const d = new Date();
+function todayISO(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -215,6 +214,19 @@ function renderHome() {
           <button class="btn danger" data-action="discard">Discard</button>
         </div>
       </section>`;
+  }
+
+  if (backupDue()) {
+    const last = Store.state.lastBackup;
+    html += `
+      <a class="card nudge" href="#/settings">
+        <span class="nudge-icon" aria-hidden="true">💾</span>
+        <span class="grow">
+          <strong>Back up your workouts</strong>
+          <span class="muted">${last ? `Last backup ${daysAgo(todayISO(new Date(last)))}` : "You haven't saved a backup yet"}</span>
+        </span>
+        <span class="chev" aria-hidden="true">›</span>
+      </a>`;
   }
 
   // Any day can be started; the rotation's next day is only highlighted as a suggestion.
@@ -452,8 +464,87 @@ function renderSettings() {
       <input id="name-input" class="text-input" type="text" autocomplete="given-name" autocapitalize="words"
              enterkeyhint="done" maxlength="40" placeholder="Your name" value="${esc(Store.state.name || "")}">
       <p class="muted hint">Shown on the Home screen. It stays on this phone — nothing is shared.</p>
+    </section>
+
+    <h2 class="section-title">Backup</h2>
+    <section class="card">
+      <p class="body-text">Your workouts are saved only on this phone. If Safari's data is cleared or you get a new
+      phone, they're gone — so save a backup now and then, to Files, iCloud Drive or an email to yourself.</p>
+      <p class="muted hint">${backupStatus()}</p>
+      <div class="stack">
+        <button class="btn primary block" data-action="export">Save backup</button>
+        <button class="btn block" data-action="import">Restore from backup</button>
+      </div>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
     </section>`;
 }
+
+function backupStatus() {
+  const n = Store.state.workouts.length;
+  const last = Store.state.lastBackup;
+  return `${plural(n, "workout")} on this phone · ${last ? `last backup ${daysAgo(todayISO(new Date(last)))}` : "no backup yet"}`;
+}
+
+// Nudge on Home once there's something worth losing and no backup in two weeks.
+function backupDue() {
+  const last = Store.state.lastBackup;
+  return Store.state.workouts.length >= 3 && (!last || Date.now() - Date.parse(last) > 14 * 86400000);
+}
+
+async function saveBackup() {
+  const filename = `workouts-backup-${todayISO()}.json`;
+  const file = new File([Store.backupJSON()], filename, { type: "application/json" });
+  try {
+    // On iPhone this opens the share sheet: Save to Files, AirDrop, Mail…
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Workout backup" });
+    } else {
+      const url = URL.createObjectURL(file);
+      const link = Object.assign(document.createElement("a"), { href: url, download: filename });
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return; // share sheet closed without saving
+    console.error(err);
+    await tell("Couldn't create the backup file.");
+    return;
+  }
+  Store.state.lastBackup = new Date().toISOString();
+  Store.save();
+  toast("Backup saved");
+  if (document.body.dataset.route === "settings") renderSettings();
+}
+
+async function restoreBackup(file) {
+  let backup;
+  try {
+    backup = Store.parseBackup(await file.text());
+  } catch (err) {
+    await tell(err.message);
+    return;
+  }
+  const have = new Set(Store.state.workouts.map((w) => w.id));
+  const fresh = backup.workouts.filter((w) => !have.has(w.id)).length;
+  const from = backup.exportedAt ? ` from ${formatDate(todayISO(new Date(backup.exportedAt)))}` : "";
+  if (!fresh) {
+    await tell(`Everything in this backup${from} is already on this phone.`);
+    return;
+  }
+  const kept = Store.state.workouts.length ? " Workouts already on this phone are kept." : "";
+  if (!(await ask(`Add ${plural(fresh, "workout")} from this backup${from}?${kept}`, { ok: "Restore" }))) return;
+  Store.mergeBackup(backup);
+  toast(`Restored ${plural(fresh, "workout")}`);
+  renderSettings();
+}
+
+view.addEventListener("change", (e) => {
+  if (e.target.id !== "import-file" || !e.target.files.length) return;
+  restoreBackup(e.target.files[0]);
+  e.target.value = ""; // so choosing the same file again still fires
+});
 
 function saveName(value) {
   Store.state.name = value.trim();
@@ -689,6 +780,10 @@ const actions = {
   },
 
   resume() { go("#/log"); },
+
+  export: saveBackup,
+
+  import() { document.getElementById("import-file").click(); },
 
   "skip-name"() {
     saveName("");

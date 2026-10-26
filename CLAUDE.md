@@ -78,6 +78,7 @@ Plank is a **timed** exercise (log seconds, no weight). Step Ups are **per leg**
       ]
     }
   ],
+  lastBackup: null, // ISO timestamp of the last "Save backup"
   draft: null   // workout being logged/edited right now (same shape + `editing: bool`),
                 // autosaved on every change; null when nothing is in progress
 }
@@ -96,7 +97,11 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
    (Best / Last time / Change), a line chart of each session's best set (tap or drag to read a
    point), and every session listed. "Best" = heaviest weight; Plank = longest hold; an exercise
    never logged with weight = most reps. The chart is hand-built SVG in `app.js` (no library).
-5. **Settings** (person icon on Home) – name (built); lb/kg and export/import backup still to do.
+5. **Settings** (person icon on Home) – name; **Backup**: "Save backup" shares a
+   `workouts-backup-YYYY-MM-DD.json` file via the iPhone share sheet (download fallback elsewhere);
+   "Restore from backup" *merges* by workout id (never overwrites or deletes). The file holds
+   name, units and workouts, not the draft. Home shows a reminder once there are >= 3 workouts
+   and no backup in 14 days. lb/kg still to do.
 
 **Sharing:** anyone can open the same link. Each phone keeps its own name and workouts in its
 own localStorage — nothing is shared between people and nothing goes to a server.
@@ -135,7 +140,8 @@ own localStorage — nothing is shared between people and nothing goes to a serv
 - [x] PWA manifest, service worker, icons
 - [x] Progress screen (per-exercise stats, chart, session list)
 - [x] Welcome screen asks for a name; Home says "Hi, <name>"; Settings to change it
-- [ ] Settings: lb/kg, export/import backup
+- [x] Backup: save via share sheet, restore (merge), reminder on Home
+- [ ] Settings: lb/kg switch
 - [x] Home lets you pick any day (rotation's next day is only highlighted)
 - [x] Git + GitHub Pages workflow
 - [x] Live on GitHub Pages (push from GitHub Desktop; deploy runs automatically)
