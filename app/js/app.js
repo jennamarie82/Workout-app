@@ -305,7 +305,16 @@ function renderLog() {
     html += `
       <section class="card">
         <div class="ex-head"><h2>${esc(ex.name)}</h2><span class="target">${esc(targetText(ex))}</span></div>
-        <p class="last">${lastLine}</p>
+        <label class="machine">
+          <span class="machine-label">Settings</span>
+          <input class="machine-input" type="text" data-setting="machine" data-exercise="${esc(ex.id)}"
+                 value="${esc(Store.state.machineSettings[ex.id] || "")}" placeholder="Seat, pin, handle… (optional)"
+                 autocapitalize="sentences" enterkeyhint="done" aria-label="${esc(ex.name)} machine settings">
+        </label>
+        <div class="last-row">
+          <p class="last">${lastLine}</p>
+          ${sparkline(ex, d.editing ? d.id : null)}
+        </div>
         ${head}
         ${entry.sets.map((s, setIdx) => setRowHTML(ex, s, exIdx, setIdx)).join("")}
         <button class="add-set" data-action="add-set" data-ex="${exIdx}">+ Add set</button>
@@ -594,8 +603,141 @@ function repsSuffix(ex, s, metric) {
   return `× ${s.reps}${ex.perSide ? "/leg" : ""}`;
 }
 
+// Small trend line of each session's best set, shown under an exercise while logging.
+// Hidden until there are two sessions to compare. Tapping it opens the full chart.
+function sparkline(ex, excludeId) {
+  const history = exerciseHistory(ex.id).filter((h) => h.workoutId !== excludeId).slice(-8);
+  if (history.length < 2) return "";
+  const metric = progressMetric(ex, history);
+  const vals = history.map((h) => metric.value(bestSet(h.sets, metric)));
+  const w = 72, h = 26, pad = 3;
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const x = (i) => pad + (i / (vals.length - 1)) * (w - 2 * pad);
+  const y = (v) => (hi === lo ? h / 2 : pad + (1 - (v - lo) / (hi - lo)) * (h - 2 * pad));
+  const path = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const change = vals[vals.length - 1] - vals[0];
+  const changeText = `${change > 0 ? "+" : change < 0 ? "−" : "±"}${fmtNum(Math.abs(change))}${metric.unit}`;
+  const label = `${ex.name} trend over ${plural(vals.length, "workout")}: ${fmtNum(vals[0])} to ${fmtNum(vals[vals.length - 1])}${metric.unit}. Open progress.`;
+  return `
+    <a class="spark" href="#/exercise/${esc(ex.id)}" aria-label="${esc(label)}">
+      <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
+        <path d="${path}"/>
+        <circle cx="${x(vals.length - 1)}" cy="${y(vals[vals.length - 1])}" r="3"/>
+      </svg>
+      <span>${esc(changeText)}</span>
+    </a>`;
+}
+
+// ---------- Weekly overview (top of Progress) ----------
+
+const WEEKS = 12;
+let overviewMetric = "workouts"; // "workouts" | "volume"
+
+function mondayOf(d) {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+}
+
+// Workouts and weight lifted (weight × reps, both legs for per-leg moves) for each
+// of the last 12 Monday-start weeks, oldest first. Timed holds don't count as weight.
+function weeklyTotals() {
+  const thisWeek = mondayOf(new Date());
+  const weeks = Array.from({ length: WEEKS }, (_, i) => {
+    const start = new Date(thisWeek);
+    start.setDate(start.getDate() - 7 * (WEEKS - 1 - i));
+    return { start, workouts: 0, volume: 0 };
+  });
+  for (const w of Store.state.workouts) {
+    const ago = Math.round((thisWeek - mondayOf(parseISO(w.date))) / (7 * 86400000));
+    const week = weeks[WEEKS - 1 - ago];
+    if (!week) continue;
+    week.workouts++;
+    for (const e of w.exercises) {
+      const ex = exerciseById[e.exerciseId];
+      if (!ex || ex.type === "time") continue;
+      for (const s of e.sets) week.volume += (s.weight || 0) * (s.reps || 0) * (ex.perSide ? 2 : 1);
+    }
+  }
+  return weeks;
+}
+
+const fmtCompact = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : fmtNum(n));
+
+function overviewHTML() {
+  if (!Store.state.workouts.length) return "";
+  const tab = (metric, label) =>
+    `<button role="tab" aria-selected="${overviewMetric === metric}" data-action="overview" data-metric="${metric}">${label}</button>`;
+  return `
+    <section class="card">
+      <h2 class="chart-title">Last ${WEEKS} weeks</h2>
+      <div class="segmented" role="tablist" aria-label="Weekly chart">
+        ${tab("workouts", "Workouts")}${tab("volume", "Weight lifted")}
+      </div>
+      <p class="readout" id="week-readout"></p>
+      <div id="week-chart"></div>
+    </section>`;
+}
+
+// Bar per week. Tap or drag to read a week; the latest week is selected to start.
+function drawOverview() {
+  const holder = document.getElementById("week-chart");
+  if (!holder) return;
+  const weeks = weeklyTotals();
+  const value = (wk) => (overviewMetric === "volume" ? wk.volume : wk.workouts);
+  const W = 320, H = 150, left = 36, right = 8, top = 10, bottom = 22;
+  const max = Math.max(...weeks.map(value));
+  const step = niceStep(Math.max(max, overviewMetric === "volume" ? 1000 : 3) / 3);
+  const hi = Math.ceil(Math.max(max, 1) / step) * step;
+  const ticks = Array.from({ length: Math.round(hi / step) + 1 }, (_, i) => i * step);
+  const y = (v) => top + (1 - v / hi) * (H - top - bottom);
+  const slot = (W - left - right) / WEEKS;
+  const barW = Math.min(12, slot * 0.5);
+  const cx = (i) => left + slot * (i + 0.5);
+
+  // Rounded top corners, flat on the baseline.
+  const bar = (i, v) => {
+    if (!v) return "";
+    const x0 = cx(i) - barW / 2, x1 = x0 + barW, y0 = y(v), yb = y(0);
+    const r = Math.min(4, barW / 2, yb - y0);
+    return `<path class="bar" d="M${x0},${yb}V${y0 + r}Q${x0},${y0} ${x0 + r},${y0}H${x1 - r}Q${x1},${y0} ${x1},${y0 + r}V${yb}Z"/>`;
+  };
+  const short = (d) => esc(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+  holder.innerHTML = `
+    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img"
+         aria-label="${overviewMetric === "volume" ? "Weight lifted" : "Workouts"} per week for the last ${WEEKS} weeks">
+      <rect class="band" id="week-band" y="${top}" width="${slot}" height="${H - top - bottom}" rx="6"/>
+      ${ticks.map((t) => `
+        <line class="grid" x1="${left}" x2="${W - right}" y1="${y(t)}" y2="${y(t)}"/>
+        <text class="axis" x="${left - 6}" y="${y(t) + 3.5}" text-anchor="end">${fmtCompact(t)}</text>`).join("")}
+      ${weeks.map((wk, i) => bar(i, value(wk))).join("")}
+      <text class="axis" x="${cx(0) - barW / 2}" y="${H - 6}">${short(weeks[0].start)}</text>
+      <text class="axis" x="${cx(WEEKS - 1) + barW / 2}" y="${H - 6}" text-anchor="end">This week</text>
+    </svg>`;
+
+  const svg = holder.querySelector("svg");
+  const select = (i) => {
+    const wk = weeks[i];
+    svg.querySelector("#week-band").setAttribute("x", cx(i) - slot / 2);
+    const when = i === WEEKS - 1 ? "This week" : `Week of ${short(wk.start)}`;
+    const what = overviewMetric === "volume"
+      ? `${fmtNum(wk.volume)} ${units()} lifted`
+      : plural(wk.workouts, "workout");
+    document.getElementById("week-readout").innerHTML = `<strong>${what}</strong> <span class="muted">· ${when}</span>`;
+  };
+  const nearest = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const vx = ((e.clientX - rect.left) / rect.width) * W;
+    select(Math.max(0, Math.min(WEEKS - 1, Math.floor((vx - left) / slot))));
+  };
+  svg.addEventListener("pointerdown", nearest);
+  svg.addEventListener("pointermove", nearest);
+  select(WEEKS - 1);
+}
+
 function renderProgress() {
   let html = `<header class="page-head"><p class="eyebrow">By exercise</p><h1>Progress</h1></header>`;
+  html += overviewHTML();
   for (const day of DAYS) {
     html += `<h2 class="section-title">${esc(PROGRAM[day].name)}</h2><div class="card list-card">`;
     for (const ex of PROGRAM[day].exercises) {
@@ -618,21 +760,27 @@ function renderProgress() {
     html += `</div>`;
   }
   view.innerHTML = html;
+  drawOverview();
 }
 
 function renderExercise(id) {
   const ex = exerciseById[id];
   if (!ex) return go("#/progress", true);
   const history = exerciseHistory(id);
+  const back = previousHash.startsWith("#/log") || previousHash.startsWith("#/workout/")
+    ? { href: previousHash, label: "Workout" }
+    : { href: "#/progress", label: "Progress" };
+  const machine = Store.state.machineSettings[id];
   let html = `
     <header class="bar">
-      <a class="bar-btn" href="#/progress">‹ Progress</a>
+      <a class="bar-btn" href="${esc(back.href)}">‹ ${back.label}</a>
       <span></span><span></span>
     </header>
     <header class="page-head">
       <p class="eyebrow">${esc(PROGRAM[dayOfExercise[id]].name)}</p>
       <h1>${esc(ex.name)}</h1>
       <p class="muted">Target ${esc(targetText(ex))}</p>
+      ${machine ? `<p class="muted">Settings: ${esc(machine)}</p>` : ""}
     </header>`;
 
   if (!history.length) {
@@ -781,6 +929,14 @@ const actions = {
 
   resume() { go("#/log"); },
 
+  overview(btn) {
+    overviewMetric = btn.dataset.metric;
+    document.querySelectorAll('[data-action="overview"]').forEach((b) => {
+      b.setAttribute("aria-selected", b === btn);
+    });
+    drawOverview();
+  },
+
   export: saveBackup,
 
   import() { document.getElementById("import-file").click(); },
@@ -871,12 +1027,25 @@ view.addEventListener("input", (e) => {
   const field = el.dataset.field;
   const d = Store.state.draft;
   if (el.id === "name-input" && document.body.dataset.route === "settings") return saveName(el.value);
+  if (el.dataset.setting === "machine") {
+    // Machine settings belong to the exercise, not this workout, so they carry over.
+    const text = el.value.trim();
+    if (text) Store.state.machineSettings[el.dataset.exercise] = text;
+    else delete Store.state.machineSettings[el.dataset.exercise];
+    Store.save();
+    return;
+  }
   if (!field || !d) return;
   if (field === "date") d.date = el.value || todayISO();
   else if (field === "notes") d.notes = el.value;
   else rowContext(el).set[field] = parseNum(el.value);
   el.classList.remove("need");
   Store.save();
+});
+
+// "Done" on the keyboard closes it for one-line text fields.
+view.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.classList.contains("machine-input")) e.target.blur();
 });
 
 // Select the whole number on focus so typing replaces it.
@@ -886,7 +1055,18 @@ view.addEventListener("focusin", (e) => {
 
 // ---------- Router ----------
 
+// Where the user came from, so the exercise page can go back to the workout
+// they were logging (and to the same spot on it) instead of always to Progress.
+let currentHash = "";
+let previousHash = "";
+let logScrollY = 0;
+
 function route() {
+  if (location.hash !== currentHash) {
+    if (currentHash.startsWith("#/log")) logScrollY = window.scrollY;
+    previousHash = currentHash;
+    currentHash = location.hash;
+  }
   const [name, param] = location.hash.replace(/^#\/?/, "").split("/");
   let screen = name || "home";
   if (screen === "log" && !Store.state.draft) return go("#/", true);
@@ -906,7 +1086,8 @@ function route() {
   else if (screen === "welcome") renderWelcome();
   else if (screen === "settings") renderSettings();
   else renderHome();
-  window.scrollTo(0, 0);
+  const backToLog = screen === "log" && previousHash.startsWith("#/exercise/");
+  window.scrollTo(0, backToLog ? logScrollY : 0);
 }
 
 Store.load();

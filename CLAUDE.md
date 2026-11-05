@@ -79,6 +79,7 @@ Plank is a **timed** exercise (log seconds, no weight). Step Ups are **per leg**
     }
   ],
   lastBackup: null, // ISO timestamp of the last "Save backup"
+  machineSettings: { "leg-press": "Seat 6" }, // per exercise, remembered across workouts (not per workout)
   draft: null   // workout being logged/edited right now (same shape + `editing: bool`),
                 // autosaved on every change; null when nothing is in progress
 }
@@ -92,8 +93,12 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
 2. **Workout logger** – date picker (defaults to today), list of exercises; each set row
    shows target reps, weight & reps inputs pre-filled from last time, and a ✓ button.
    "Finish workout" saves it. In-progress workouts autosave so nothing is lost.
+   Under each exercise: a **Settings** line (machine setup, saved per exercise and pre-filled
+   every time) and a **mini trend graph** of the last 8 sessions' best sets (shown once there are
+   2+; tapping opens the exercise page, whose back button returns to the same spot in the log).
 3. **History** – list of past workouts by date; tap to view/edit/delete.
-4. **Progress** – every exercise grouped by day with its best so far; tap one for stat tiles
+4. **Progress** – a **Last 12 weeks** bar chart at the top (toggle: workouts per week /
+   weight lifted = weight × reps, ×2 for per-leg moves, timed holds excluded); then every exercise grouped by day with its best so far; tap one for stat tiles
    (Best / Last time / Change), a line chart of each session's best set (tap or drag to read a
    point), and every session listed. "Best" = heaviest weight; Plank = longest hold; an exercise
    never logged with weight = most reps. The chart is hand-built SVG in `app.js` (no library).
@@ -101,7 +106,7 @@ Bump `version` and write a migration in `storage.js` if this shape changes.
    `workouts-backup-YYYY-MM-DD.json` file via the iPhone share sheet (download fallback elsewhere);
    "Restore from backup" *merges* by workout id (never overwrites or deletes). The file holds
    name, units and workouts, not the draft. Home shows a reminder once there are >= 3 workouts
-   and no backup in 14 days. lb/kg still to do.
+   and no backup in 14 days. Backups include machine settings (merge fills gaps only). lb/kg still to do.
 
 **Sharing:** anyone can open the same link. Each phone keeps its own name and workouts in its
 own localStorage — nothing is shared between people and nothing goes to a server.
@@ -141,6 +146,7 @@ own localStorage — nothing is shared between people and nothing goes to a serv
 - [x] Progress screen (per-exercise stats, chart, session list)
 - [x] Welcome screen asks for a name; Home says "Hi, <name>"; Settings to change it
 - [x] Backup: save via share sheet, restore (merge), reminder on Home
+- [x] Machine settings per exercise, mini trend graphs in the logger, weekly overview chart
 - [ ] Settings: lb/kg switch
 - [x] Home lets you pick any day (rotation's next day is only highlighted)
 - [x] Git + GitHub Pages workflow

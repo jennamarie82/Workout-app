@@ -15,6 +15,7 @@ const Store = (() => {
       workouts: [],
       draft: null, // the workout currently being logged or edited (autosaved)
       lastBackup: null, // ISO timestamp of the last "Save backup"
+      machineSettings: {}, // exerciseId -> e.g. "Seat 4, back pad 2"; remembered across workouts
     };
   }
 
@@ -56,6 +57,7 @@ const Store = (() => {
       exportedAt: new Date().toISOString(),
       name: state.name,
       units: state.units,
+      machineSettings: state.machineSettings,
       workouts: state.workouts,
     }, null, 2);
   }
@@ -78,16 +80,29 @@ const Store = (() => {
     if (!data || !Array.isArray(data.workouts)) throw new Error("This file isn't a workout backup.");
     const workouts = data.workouts.filter(isWorkout);
     if (data.workouts.length && !workouts.length) throw new Error("This backup's workouts couldn't be read.");
-    return { workouts, name: typeof data.name === "string" ? data.name : null, exportedAt: data.exportedAt || null };
+    const machineSettings = {};
+    for (const [id, text] of Object.entries(data.machineSettings || {})) {
+      if (typeof text === "string" && text.trim()) machineSettings[id] = text;
+    }
+    return {
+      workouts,
+      machineSettings,
+      name: typeof data.name === "string" ? data.name : null,
+      exportedAt: data.exportedAt || null,
+    };
   }
 
   // Adds the backup's workouts that aren't on this phone yet (matched by id), and its
-  // name if this phone has none. Workouts already here are left as they are.
+  // name and machine settings where this phone has none. Nothing here is overwritten.
   function mergeBackup(backup) {
     const have = new Set(state.workouts.map((w) => w.id));
     const added = backup.workouts.filter((w) => !have.has(w.id));
     state.workouts.push(...added);
     if (!state.name && backup.name) state.name = backup.name;
+    // Machine settings: fill in exercises that have none here; never overwrite.
+    for (const [id, text] of Object.entries(backup.machineSettings || {})) {
+      if (!state.machineSettings[id]) state.machineSettings[id] = text;
+    }
     save();
     return added.length;
   }
